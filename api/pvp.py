@@ -22,39 +22,52 @@ class handler(BaseHTTPRequestHandler):
             self._json(200, {"ticker": ticker, "pvp": pvp})
         except Exception as e:
             self._json(500, {"error": str(e)})
-
     def _scrape(self, ticker):
         headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            )
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "pt-BR,pt;q=0.9",
         }
-
-        paths = [
-            "acoes/" + ticker.lower(),
-            "fundos-imobiliarios/" + ticker.lower(),
-        ]
-
+        paths = ["fundos-imobiliarios/" + ticker.lower(), "acoes/" + ticker.lower()]
+    
         for path in paths:
             url = "https://statusinvest.com.br/" + path
-            try:
-                r = requests.get(url, headers=headers, timeout=10)
-                if r.status_code != 200:
-                    continue
-                soup = BeautifulSoup(r.text, "html.parser")
-
-                for div in soup.select("div.indicator-today-container"):
-                    h3 = div.find("h3", class_="title")
-                    if h3 and "P/VP" in h3.text:
-                        strong = div.find("strong", class_="value")
-                        if strong:
-                            val = re.sub(r"[^\d,.]", "", strong.text).replace(",", ".")
-                            return float(val)
-            except Exception:
+            r = requests.get(url, headers=headers, timeout=15)
+            if r.status_code != 200:
                 continue
-
+            
+            soup = BeautifulSoup(r.text, "html.parser")
+            
+            # Estratégia 1: achar h3 com título "P/VP" e pegar o strong mais próximo
+            for h3 in soup.find_all("h3"):
+                title = h3.get_text(strip=True)
+                if title == "P/VP" or title.upper() == "P/VP":
+                    # Sobe até o container e procura o strong com a classe value
+                    container = h3.find_parent("div")
+                    while container is not None:
+                        strong = container.find("strong", class_="value")
+                        if strong and strong.get_text(strip=True):
+                            val = re.sub(r"[^\d,.-]", "", strong.get_text())
+                            val = val.replace(".", "").replace(",", ".")  # 1.234,56 -> 1234.56
+                            try:
+                                return float(val)
+                            except ValueError:
+                                pass
+                        container = container.find_parent("div")
+            
+            # Estratégia 2 (fallback): h3 com atributo title
+            for h3 in soup.find_all("h3", attrs={"title": re.compile(r"P/VP|Preço.*Valor Patrimonial", re.I)}):
+                container = h3.find_parent("div", class_=re.compile(r"info"))
+                if container:
+                    strong = container.find("strong", class_="value")
+                    if strong:
+                        val = re.sub(r"[^\d,.-]", "", strong.get_text())
+                        val = val.replace(".", "").replace(",", ".")
+                        try:
+                            return float(val)
+                        except ValueError:
+                            pass
+        
         raise ValueError("P/VP nao encontrado para " + ticker)
 
     def _json(self, status, body):
