@@ -1,7 +1,5 @@
 {
-  "functions": {
-    "api/pvp.py": {
-      "runtime": "python3.9"
-    }
-  }
+  "rewrites": [
+    { "source": "/api/pvp", "destination": "/api/pvp.py" }
+  ]
 }
