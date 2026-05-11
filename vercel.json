@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/pvp.py": {
+      "runtime": "python3.9"
+    }
+  }
+}
